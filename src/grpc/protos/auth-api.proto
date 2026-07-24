@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package AuthApi;
+
+service AuthApiController {
+  rpc RequestSendAuthData (AuthRequest) returns (AuthResponse) {}
+}
+
+message AuthRequest {
+ repeated string authdata = 1; 
+}
+
+message AuthResponse {
+  string authresponse = 1;
+}
