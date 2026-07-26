@@ -68,5 +68,33 @@ export class UsersRepository extends Repository<Users> {
             throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
         }
     }
+
+    async getUserById(userId: string) {
+        try {
+            const data = await this.find({
+                where: {
+                    id: userId
+                },
+                select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    mobile_number: true,
+                    password: true,
+                    email: true,
+                    status: true,
+                    mobile_verified: true
+                }
+            });
+
+            if (!NB.isNoEmpty(data)) {
+                throw new NBException('User not found', HttpStatus.BAD_REQUEST);
+            }
+
+            return data[0];
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
 }
 

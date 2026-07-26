@@ -343,5 +343,28 @@ export class AppHelper {
         }
     }
 
+    hashToken(token: string): string {
+        if (!token) return '';
+        return crypto
+            .createHash('sha256')
+            .update(token)
+            .digest('hex'); // Returns a 64-character hexadecimal string
+    }
+
+    verifyTokenHash(rawToken: string, storedHash: string): boolean {
+        if (!rawToken || !storedHash) return false;
+        
+        const hashedInput = this.hashToken(rawToken);
+
+        // Timing-safe comparison prevents timing side-channel attacks
+        const inputBuffer = Buffer.from(hashedInput, 'hex');
+        const storedBuffer = Buffer.from(storedHash, 'hex');
+
+        if (inputBuffer.length !== storedBuffer.length) {
+            return false;
+        }
+
+        return crypto.timingSafeEqual(inputBuffer, storedBuffer);
+    }
 
 }

@@ -20,5 +20,26 @@ export class SessionsRepository extends Repository<Sessions> {
             throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
         }
     }
+
+    async updateLastActivityByRefreshTokenId(refreshTokenId: string) {
+        try {
+            const update = await this.update(
+                {
+                    refresh_token_id: refreshTokenId
+                },
+                {
+                    last_activity: new Date()
+                }
+            );
+
+            if (update.affected === 0) {
+                throw new NBException('Refresh token not found', HttpStatus.BAD_REQUEST);
+            }
+
+            return update;
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
 }
 

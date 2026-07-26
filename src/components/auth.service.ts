@@ -191,7 +191,6 @@ export class AuthService {
             return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid credentials');
         }
 
-        console.log('user', user);
         if (user.status !== 1) {
             return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'User is inactive or suspended');
         }
@@ -249,7 +248,7 @@ export class AuthService {
 
         const savedRefreshToken = await this.refreshTokensRep.saveRefreshToken({
             user_id: user.id,
-            token: this.appHelper.encryptString(refreshToken),
+            token: this.appHelper.hashToken(refreshToken),
             expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             revoked: 0
         })
@@ -297,6 +296,66 @@ export class AuthService {
                 first_name: user.first_name,
                 last_name: user.last_name,
             },
+        });
+    }
+
+    async refreshToken(operation: string, action: string, data: any) {
+
+        if (!NB.isNoEmpty(data) || !NB.isNoEmpty(data.refresh_token)) {
+            return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Missing refresh token');
+        }
+
+        const { refresh_token } = data;
+
+        const decode = this.appHelper.verifyRefreshToken(refresh_token);
+        if (!NB.isNoEmpty(decode) || !decode.sub) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid or expired refresh token');
+        }
+
+        const userId = decode.sub;
+
+        const tokenHash = this.appHelper.hashToken(refresh_token);
+
+        const storedToken = await this.refreshTokensRep.getTokenDatabyHashToken(tokenHash);
+        if (!NB.isNoEmpty(storedToken)) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid or expired refresh token');
+        }
+
+        const isValid = this.appHelper.verifyTokenHash(refresh_token, storedToken.token);
+        if (!isValid) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid refresh token');
+        }
+
+        if (storedToken.revoked === 1) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Refresh token has been revoked');
+        }
+
+        if (storedToken.expires_at < new Date()) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Refresh token has expired');
+        }
+
+        const user = await this.usersRepo.getUserById(userId);
+        if (!NB.isNoEmpty(user)) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'User not found');
+        }
+        if (!user.status) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'User is inactive');
+        }
+
+        await this.sessionsRepo.updateLastActivityByRefreshTokenId(storedToken.id);
+
+        const tokenPayload = {
+            sub: user.id,
+            mobile_number: user.mobile_number,
+            first_name: user.first_name,
+            last_name: user.last_name
+        }
+
+        const newAccessToken = this.appHelper.generateAccessToken(tokenPayload);
+
+        return GrpcSuccessResponse(HttpStatus.OK, 'Token refreshed successfully', {
+            access_token: newAccessToken,
+            refresh_token: refresh_token,
         });
     }
 }

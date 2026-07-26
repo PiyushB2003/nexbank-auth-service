@@ -71,6 +71,9 @@ export class AuthController {
                 case 'login':
                     return await this.authService.login(operation, action, authData);
 
+                case 'refresh-token':
+                    return await this.authService.refreshToken(operation, action, authData);
+
                 default:
                     return GrpcErrorResponse(HttpStatus.BAD_REQUEST, `Unknown or missing action: ${action}`);
             }
