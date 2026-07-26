@@ -39,5 +39,14 @@ export class RefreshTokensRepository extends Repository<RefreshTokens> {
             throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
         }
     }
+
+    async updateRefreshToken(tokenHash: any, data: any) {
+        try {
+            const update = await this.update(tokenHash, data);
+            return update;
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
 }
 

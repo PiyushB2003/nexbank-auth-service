@@ -40,8 +40,8 @@ export class Sessions {
     @Column({ type: 'datetime', nullable: true })
     logout_at?: Date;
 
-    @Column({ default: true })
-    is_active: boolean;
+    @Column({ default: 1 })
+    is_active: number;
 
     /*
      * Relationships

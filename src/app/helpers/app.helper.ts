@@ -271,22 +271,20 @@ export class AppHelper {
         }
     }
 
-    generateAccessToken(payload: { sub: string; mobile_number: string; first_name?: string; last_name?: string }): string {
+    generateAccessToken(payload: { sub: string; session_id: string}): string | null {
         try {
             return jwt.sign(
                 {
                     sub: payload.sub,
-                    mobile_number: payload.mobile_number,
-                    first_name: payload.first_name,
-                    last_name: payload.last_name,
-                    type: 'access',
+                    session_id: payload.session_id,
+                    type: 'ACCESS',
                 },
                 jwtAccessTokenKey,
                 { expiresIn: '15m' }
             );
         } catch (error: any) {
-            console.log('Error generating access token:', error);
-            return `[Error generating access token]: ${error.message}`;
+            console.log('Error generating access token:', error.message);
+            return null;
         }
     }
 

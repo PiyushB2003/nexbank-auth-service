@@ -41,5 +41,41 @@ export class SessionsRepository extends Repository<Sessions> {
             throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
         }
     }
+
+    async getSessionByRefreshTokenId(refreshTokenId: string): Promise<Sessions | null> {
+        try {
+            return await this.findOne({
+                where: {
+                    refresh_token_id: refreshTokenId,
+                    is_active: 1
+                },
+            });
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    async getSessionByUserId(userId: string, sessionId: string): Promise<Sessions | null> {
+        try {
+            return await this.findOne({
+                where: {
+                    id: sessionId,
+                    user_id: userId,
+                    is_active: 1
+                },
+            });
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    async updateSession(sessionId: string, data: any) {
+        try {
+            const update = await this.update(sessionId, data);
+            return update;
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
 }
 

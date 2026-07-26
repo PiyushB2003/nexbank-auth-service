@@ -236,14 +236,6 @@ export class AuthService {
             }
         }
 
-        const tokenPayload = {
-            sub: user.id,
-            mobile_number: user.mobile_number,
-            first_name: user.first_name,
-            last_name: user.last_name
-        };
-
-        const accessToken = this.appHelper.generateAccessToken(tokenPayload);
         const refreshToken = this.appHelper.generateRefreshToken({ sub: user.id });
 
         const savedRefreshToken = await this.refreshTokensRep.saveRefreshToken({
@@ -266,7 +258,7 @@ export class AuthService {
             return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Refresh token registration failed');
         }
 
-        await this.sessionsRepo.createSession({
+        const savedSession = await this.sessionsRepo.createSession({
             user_id: user.id,
             device_id: (NB.isNoEmpty(savedDevice) && savedDevice.id) ? savedDevice.id : null,
             refresh_token_id: savedRefreshToken.id,
@@ -286,6 +278,12 @@ export class AuthService {
         })
 
         await this.usersRepo.updateLastLogin(user.id);
+
+        const tokenPayload = {
+            sub: user.id,
+            session_id: (NB.isNoEmpty(savedSession) && savedSession.id) ? savedSession.id : null
+        };
+        const accessToken = this.appHelper.generateAccessToken(tokenPayload);
 
         return GrpcSuccessResponse(HttpStatus.OK, 'Login successful', {
             access_token: accessToken,
@@ -342,13 +340,19 @@ export class AuthService {
             return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'User is inactive');
         }
 
+        const session: any = await this.sessionsRepo.getSessionByRefreshTokenId(storedToken.id);
+        if (!NB.isNoEmpty(session) || session.is_active === 0) {
+            return GrpcErrorResponse(
+                HttpStatus.UNAUTHORIZED,
+                'Associated session is inactive or terminated'
+            );
+        }
+
         await this.sessionsRepo.updateLastActivityByRefreshTokenId(storedToken.id);
 
         const tokenPayload = {
             sub: user.id,
-            mobile_number: user.mobile_number,
-            first_name: user.first_name,
-            last_name: user.last_name
+            session_id: session.id
         }
 
         const newAccessToken = this.appHelper.generateAccessToken(tokenPayload);
@@ -357,5 +361,29 @@ export class AuthService {
             access_token: newAccessToken,
             refresh_token: refresh_token,
         });
+    }
+
+    async logout(operation: string, action: string, data: any) {
+
+        if (!NB.isNoEmpty(data) || !NB.isNoEmpty(data.sub)) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid token');
+        }
+
+        const { sub, session_id } = data;
+
+        const session: any = await this.sessionsRepo.getSessionByUserId(sub, session_id);
+        if (!NB.isNoEmpty(session)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'No active session found');
+        }
+
+        await this.refreshTokensRep.updateRefreshToken(session?.refresh_token_id, { revoked: 1 });
+
+        await this.sessionsRepo.updateSession(session.id, {
+            is_active: 0,
+            logout_at: new Date(),
+            last_activity: new Date(),
+        });
+
+        return GrpcSuccessResponse(HttpStatus.OK, 'Logout successful');
     }
 }
