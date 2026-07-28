@@ -65,7 +65,8 @@ export class AuthService {
 
         await this.redisService.saveOtp("register", data.mobile_number, hashedOtp);
 
-        //TODO: Invoke Notification Service to deliver OTP via SMS.
+        // TODO: Invoke Notification Service to deliver OTP via SMS
+        console.log(`[DEBUG - REGISTRATION OTP for ${data.mobile_number}]: ${otp}`);
 
         return GrpcSuccessResponse(HttpStatus.OK, 'OTP sent successfully', hashedOtp);
     }
@@ -492,6 +493,49 @@ export class AuthService {
         return GrpcSuccessResponse(
             HttpStatus.OK,
             'Password changed successfully. Other active sessions have been logged out.'
+        );
+    }
+
+    async forgotPassword(operation: string, action: string, data: any) {
+
+        if (!NB.isNoEmpty(data)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'Data not found');
+        }
+
+        if (!NB.isNoEmpty(data.mobile_number)) {
+            return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Mobile number is required')
+        }
+
+        const { mobile_number } = data;
+
+        const user = await this.usersRepo.findByMobileNumber(mobile_number);
+
+        if (!NB.isNoEmpty(user) || user.status !== 1) {
+            return GrpcSuccessResponse(
+                HttpStatus.OK,
+                'If an active account exists, an OTP has been sent'
+            )
+        }
+
+        const otpExists = await this.redisService.otpExists('forgot-password', mobile_number);
+        if (otpExists) {
+            GrpcErrorResponse(
+                HttpStatus.TOO_MANY_REQUESTS,
+                'OTP already sent, please wait before requesting another OTP'
+            )
+        }
+
+        const otp = this.appHelper.generateOtp();
+        const hashedOtp = await this.appHelper.hashedOtp(otp);
+
+        await this.redisService.saveOtp('forgot-password', mobile_number, hashedOtp);
+
+        // TODO: Invoke Notification Service to deliver OTP via SMS
+        console.log(`[DEBUG - FORGOT PASSWORD OTP for ${mobile_number}]: ${otp}`);
+
+        return GrpcSuccessResponse(
+            HttpStatus.OK,
+            'If an active account exists, an OTP has been sent.'
         );
     }
 }
