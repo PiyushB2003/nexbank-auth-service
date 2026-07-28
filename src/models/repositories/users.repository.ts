@@ -69,6 +69,15 @@ export class UsersRepository extends Repository<Users> {
         }
     }
 
+    async updatePassword(userId: string, newPassword: string) {
+        try {
+            const update = await this.update(userId, { password: newPassword })
+            return update;
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
+
     async getUserById(userId: string) {
         try {
             const data = await this.find({

@@ -1,12 +1,14 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { NBException } from "src/app/exceptions/forbidden-error.exception";
 import { Sessions } from "../entities/sessions.entity";
+import { RefreshTokensRepository } from "./refresh_tokens.repository";
 
 @Injectable()
 export class SessionsRepository extends Repository<Sessions> {
 
     constructor(
+        private refreshTokensRepo: RefreshTokensRepository,
         private dataSource: DataSource,
     ) {
         super(Sessions, dataSource.createEntityManager());
@@ -55,7 +57,7 @@ export class SessionsRepository extends Repository<Sessions> {
         }
     }
 
-    async getSessionByUserId(userId: string, sessionId: string): Promise<Sessions | null> {
+    async getSessionByIdNUserId(userId: string, sessionId: string): Promise<Sessions | null> {
         try {
             return await this.findOne({
                 where: {
@@ -77,5 +79,37 @@ export class SessionsRepository extends Repository<Sessions> {
             throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
         }
     }
-}
 
+    async revokeAllOtherSessions(userId: string, currentSessionId: string): Promise<void> {
+        // 1. Fetch all other active sessions for this user
+        const otherSessions = await this.find({
+            where: {
+                user_id: userId,
+                is_active: 1,
+            },
+        });
+
+        const sessionsToRevoke = otherSessions.filter((s) => s.id !== currentSessionId);
+
+        if (sessionsToRevoke.length > 0) {
+            const refreshTokenIds = sessionsToRevoke
+                .map((s) => s.refresh_token_id)
+                .filter((id) => id !== null);
+
+            // 2. Revoke their refresh tokens
+            if (refreshTokenIds.length > 0) {
+                await this.refreshTokensRepo.update(
+                    { id: In(refreshTokenIds) },
+                    { revoked: 1, revoked_at: new Date() }
+                );
+            }
+
+            // 3. Deactivate those sessions
+            const otherSessionIds = sessionsToRevoke.map((s) => s.id);
+            await this.update(
+                { id: In(otherSessionIds) },
+                { is_active: 0, logout_at: new Date() }
+            );
+        }
+    }
+}

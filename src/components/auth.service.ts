@@ -184,9 +184,9 @@ export class AuthService {
                 mobile_number,
                 status: 0,
                 failure_reason: 'User not found',
-                device_name: NB.isNoEmpty(device) ? device.device_name : "",
-                user_agent: NB.isNoEmpty(device) ? device.user_agent : "",
-                ip_address: NB.isNoEmpty(device) ? device.ip_address : ""
+                device_name: NB.isNoEmpty(device.device_name) ? device.device_name : "",
+                user_agent: NB.isNoEmpty(device.user_agent) ? device.user_agent : "",
+                ip_address: NB.isNoEmpty(device.ip_address) ? device.ip_address : ""
             })
             return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid credentials');
         }
@@ -202,9 +202,9 @@ export class AuthService {
                 mobile_number,
                 status: 0,
                 failure_reason: 'Invalid password',
-                device_name: NB.isNoEmpty(device) ? device.device_name : "",
-                user_agent: NB.isNoEmpty(device) ? device.user_agent : "",
-                ip_address: NB.isNoEmpty(device) ? device.ip_address : ""
+                device_name: NB.isNoEmpty(device.device_name) ? device.device_name : "",
+                user_agent: NB.isNoEmpty(device.user_agent) ? device.user_agent : "",
+                ip_address: NB.isNoEmpty(device.ip_address) ? device.ip_address : ""
             })
             return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid credentials');
         }
@@ -228,9 +228,9 @@ export class AuthService {
                     mobile_number,
                     status: 0,
                     failure_reason: 'Device registration failed',
-                    device_name: NB.isNoEmpty(device) ? device.device_name : "",
-                    user_agent: NB.isNoEmpty(device) ? device.user_agent : "",
-                    ip_address: NB.isNoEmpty(device) ? device.ip_address : ""
+                    device_name: NB.isNoEmpty(device.device_name) ? device.device_name : "",
+                    user_agent: NB.isNoEmpty(device.user_agent) ? device.user_agent : "",
+                    ip_address: NB.isNoEmpty(device.ip_address) ? device.ip_address : ""
                 })
                 return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Device registration failed');
             }
@@ -251,9 +251,9 @@ export class AuthService {
                 mobile_number,
                 status: 0,
                 failure_reason: 'Refresh token registration failed',
-                device_name: NB.isNoEmpty(device) ? device.device_name : "",
-                user_agent: NB.isNoEmpty(device) ? device.user_agent : "",
-                ip_address: NB.isNoEmpty(device) ? device.ip_address : ""
+                device_name: NB.isNoEmpty(device.device_name) ? device.device_name : "",
+                user_agent: NB.isNoEmpty(device.user_agent) ? device.user_agent : "",
+                ip_address: NB.isNoEmpty(device.ip_address) ? device.ip_address : ""
             })
             return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Refresh token registration failed');
         }
@@ -262,9 +262,9 @@ export class AuthService {
             user_id: user.id,
             device_id: (NB.isNoEmpty(savedDevice) && savedDevice.id) ? savedDevice.id : null,
             refresh_token_id: savedRefreshToken.id,
-            ip_address: NB.isNoEmpty(device) ? device.ip_address : null,
-            user_agent: NB.isNoEmpty(device) ? device.user_agent : null,
-            is_active: true,
+            ip_address: NB.isNoEmpty(device.ip_address) ? device.ip_address : null,
+            user_agent: NB.isNoEmpty(device.user_agent) ? device.user_agent : null,
+            is_active: 1,
             last_activity: new Date(),
         })
 
@@ -273,8 +273,8 @@ export class AuthService {
             mobile_number,
             status: 1,
             reason: 'Login successful',
-            user_agent: NB.isNoEmpty(device) ? device.user_agent : "",
-            ip_address: NB.isNoEmpty(device) ? device.ip_address : "",
+            user_agent: NB.isNoEmpty(device.user_agent) ? device.user_agent : "",
+            ip_address: NB.isNoEmpty(device.ip_address) ? device.ip_address : "",
         })
 
         await this.usersRepo.updateLastLogin(user.id);
@@ -371,7 +371,7 @@ export class AuthService {
 
         const { sub, session_id } = data;
 
-        const session: any = await this.sessionsRepo.getSessionByUserId(sub, session_id);
+        const session: any = await this.sessionsRepo.getSessionByIdNUserId(sub, session_id);
         if (!NB.isNoEmpty(session)) {
             return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'No active session found');
         }
@@ -385,5 +385,113 @@ export class AuthService {
         });
 
         return GrpcSuccessResponse(HttpStatus.OK, 'Logout successful');
+    }
+
+    async getProfile(operation: string, action: string, data: any) {
+
+        if (!NB.isNoEmpty(data) || !NB.isNoEmpty(data.sub)) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid token');
+        }
+
+        const { sub: userId, session_id: sessionId } = data;
+
+        const user = await this.usersRepo.getUserById(userId)
+        if (!NB.isNoEmpty(user)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'User profile not found')
+        }
+
+        if (user.status !== 1) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'User account is inactive or suspended')
+        }
+
+        const session: any = await this.sessionsRepo.getSessionByIdNUserId(userId, sessionId)
+        if (!NB.isNoEmpty(session) || session.is_active === 0) {
+            return GrpcErrorResponse(
+                HttpStatus.UNAUTHORIZED,
+                'Associated session is inactive or terminated'
+            );
+        }
+
+        await this.sessionsRepo.updateSession(session.id, { last_activity: new Date() });
+
+        return GrpcSuccessResponse(
+            HttpStatus.OK,
+            'Profile fetched successfully',
+            {
+                id: user.id,
+                first_name: user.first_name,
+                last_name: user.last_name,
+                mobile_number: user.mobile_number,
+                email: user.email,
+                status: user.status,
+                created_at: user.created_at,
+                current_session: {
+                    session_id: session.id,
+                    ip_address: session.ip_address || null,
+                    user_agent: session.user_agent || null,
+                    login_at: session.login_at,
+                    last_activity: session.last_activity,
+                },
+            }
+        )
+    }
+
+    async changePassword(operation: string, action: string, data: any) {
+
+        if (!NB.isNoEmpty(data)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'Data not found');
+        }
+
+        if (!NB.isNoEmpty(data.user)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'User not found');
+        }
+
+        if (!NB.isNoEmpty(data.user.sub)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'Invalid token');
+        }
+
+        if (!NB.isNoEmpty(data.old_password) || !NB.isNoEmpty(data.new_password)) {
+            return GrpcErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                'Missing Required fields'
+            )
+        }
+
+        const { old_password, new_password } = data;
+        const { sub: userId, session_id: sessionId } = data.user;
+
+        if (old_password === new_password) {
+            return GrpcErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                'New password cannot be the same as the old password'
+            )
+        }
+
+        const user = await this.usersRepo.getUserById(userId);
+        if (!NB.isNoEmpty(user)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'User not found');
+        }
+
+        if (user.status !== 1) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'User account is inactive or suspended')
+        }
+
+        const isOldPasswordValid = await this.appHelper.comparePassword(old_password, user.password);
+        if (!isOldPasswordValid) {
+            return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Incorrect old password');
+        }
+
+        const hashNewPassword = await this.appHelper.hashPassword(new_password);
+
+        await this.usersRepo.updatePassword(userId, hashNewPassword);
+
+        if (sessionId) {
+            await this.sessionsRepo.revokeAllOtherSessions(userId, sessionId);
+        }
+
+        return GrpcSuccessResponse(
+            HttpStatus.OK,
+            'Password changed successfully. Other active sessions have been logged out.'
+        );
     }
 }
