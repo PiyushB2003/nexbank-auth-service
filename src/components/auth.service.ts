@@ -538,4 +538,50 @@ export class AuthService {
             'If an active account exists, an OTP has been sent.'
         );
     }
+
+    async resetPassword(operation: string, action: string, data: any) {
+
+        if (!NB.isNoEmpty(data)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'Data not found');
+        }
+
+        if (
+            !NB.isNoEmpty(data.mobile_number) ||
+            !NB.isNoEmpty(data.otp) ||
+            !NB.isNoEmpty(data.new_password)
+        ) {
+            return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Missing required fields');
+        }
+
+        const { mobile_number, otp, new_password } = data;
+
+        const storedHashedOtp: any = await this.redisService.getOtp('forgot-password', mobile_number);
+        if (!NB.isNoEmpty(storedHashedOtp)) {
+            return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'OTP has expired or is invalid');
+        }
+
+        const isOtpValid = await this.appHelper.compareOtp(otp, storedHashedOtp);
+        if (!isOtpValid) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'Invalid OTP entered');
+        }
+
+        const user = await this.usersRepo.findByMobileNumber(mobile_number);
+
+        if (!NB.isNoEmpty(user)) {
+            return GrpcErrorResponse(HttpStatus.NOT_FOUND, 'User not found');
+        }
+
+        if (user.status !== 1) {
+            return GrpcErrorResponse(HttpStatus.UNAUTHORIZED, 'User account is inactive or suspended')
+        }
+
+        const hashedNewPassword = await this.appHelper.hashPassword(new_password);
+        await this.usersRepo.updatePassword(user.id, hashedNewPassword);
+
+        await this.sessionsRepo.revokeAllUserSessions(user.id);
+
+        await this.redisService.deleteOtp('forgot-password', mobile_number);
+
+        return GrpcSuccessResponse(HttpStatus.OK, 'Password reset successfully. Please log in');
+    }
 }

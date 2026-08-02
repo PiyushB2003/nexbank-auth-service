@@ -86,6 +86,9 @@ export class AuthController {
                 case 'forgot-password':
                     return await this.authService.forgotPassword(operation, action, authData);
 
+                case 'reset-password':
+                    return await this.authService.resetPassword(operation, action, authData);
+
                 default:
                     return GrpcErrorResponse(HttpStatus.BAD_REQUEST, `Unknown or missing action: ${action}`);
             }

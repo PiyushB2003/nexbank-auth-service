@@ -71,6 +71,19 @@ export class SessionsRepository extends Repository<Sessions> {
         }
     }
 
+    async getSessionByUserId(userId: string): Promise<Sessions | null> {
+        try {
+            return await this.findOne({
+                where: {
+                    user_id: userId,
+                    is_active: 1
+                },
+            });
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
+
     async updateSession(sessionId: string, data: any) {
         try {
             const update = await this.update(sessionId, data);
@@ -81,22 +94,57 @@ export class SessionsRepository extends Repository<Sessions> {
     }
 
     async revokeAllOtherSessions(userId: string, currentSessionId: string): Promise<void> {
-        // 1. Fetch all other active sessions for this user
-        const otherSessions = await this.find({
-            where: {
-                user_id: userId,
-                is_active: 1,
-            },
-        });
+        try {
+            // 1. Fetch all other active sessions for this user
+            const otherSessions = await this.find({
+                where: {
+                    user_id: userId,
+                    is_active: 1,
+                },
+            });
 
-        const sessionsToRevoke = otherSessions.filter((s) => s.id !== currentSessionId);
+            const sessionsToRevoke = otherSessions.filter((s) => s.id !== currentSessionId);
 
-        if (sessionsToRevoke.length > 0) {
-            const refreshTokenIds = sessionsToRevoke
+            if (sessionsToRevoke.length > 0) {
+                const refreshTokenIds = sessionsToRevoke
+                    .map((s) => s.refresh_token_id)
+                    .filter((id) => id !== null);
+
+                // 2. Revoke their refresh tokens
+                if (refreshTokenIds.length > 0) {
+                    await this.refreshTokensRepo.update(
+                        { id: In(refreshTokenIds) },
+                        { revoked: 1, revoked_at: new Date() }
+                    );
+                }
+
+                // 3. Deactivate those sessions
+                const otherSessionIds = sessionsToRevoke.map((s) => s.id);
+                await this.update(
+                    { id: In(otherSessionIds) },
+                    { is_active: 0, logout_at: new Date() }
+                );
+            }
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    async revokeAllUserSessions(userId: string): Promise<void> {
+        try {
+            const activeSessions = await this.find({
+                where: {
+                    user_id: userId,
+                    is_active: 1,
+                },
+            });
+
+            if (activeSessions.length === 0) return;
+
+            const refreshTokenIds = activeSessions
                 .map((s) => s.refresh_token_id)
                 .filter((id) => id !== null);
 
-            // 2. Revoke their refresh tokens
             if (refreshTokenIds.length > 0) {
                 await this.refreshTokensRepo.update(
                     { id: In(refreshTokenIds) },
@@ -104,12 +152,13 @@ export class SessionsRepository extends Repository<Sessions> {
                 );
             }
 
-            // 3. Deactivate those sessions
-            const otherSessionIds = sessionsToRevoke.map((s) => s.id);
+            const sessionIds = activeSessions.map((s) => s.id);
             await this.update(
-                { id: In(otherSessionIds) },
+                { id: In(sessionIds) },
                 { is_active: 0, logout_at: new Date() }
             );
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
         }
     }
 }
