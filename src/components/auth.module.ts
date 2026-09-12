@@ -21,10 +21,38 @@ import { LoginHistoriesRepository } from 'src/models/repositories/login_historie
 import { RefreshTokensRepository } from 'src/models/repositories/refresh_tokens.repository';
 import { SessionsRepository } from 'src/models/repositories/sessions.repository';
 import { DevicesRepository } from 'src/models/repositories/devices.repository';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { NotificationPublisherService } from 'src/app/services/rabbitmq/notification-publisher.service';
+import dotenv from 'dotenv';
+dotenv.config();
 
 @Module({
   imports: [
+
+    ClientsModule.register([
+      {
+        name: 'NOTIFICATION_RMQ',
+
+        transport: Transport.RMQ,
+
+        options: {
+          urls: [
+            process.env.RABBITMQ_URL!,
+          ],
+
+          queue: process.env.RABBITMQ_QUEUE || 'notification_queue',
+
+          queueOptions: {
+            durable: true
+          },
+
+          persistent: true
+        }
+      }
+    ]),
+
     TypeOrmModule.forFeature([
+
       // ENTITIES
       PasswordHistories,
       RolePermissions,
@@ -52,8 +80,9 @@ import { DevicesRepository } from 'src/models/repositories/devices.repository';
     UsersRepository,
 
     // SERVICES
+    NotificationPublisherService,
     AuthService,
-    
+
     // HELPERS
     AppHelper,
   ],

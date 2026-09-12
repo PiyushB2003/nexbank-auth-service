@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { GrpcErrorResponse, GrpcSuccessResponse } from 'src/app/exceptions/grpc-responses.exception';
 import { AppHelper } from 'src/app/helpers/app.helper';
 import { NB } from 'src/app/helpers/nb.helper';
+import { NotificationPublisherService } from 'src/app/services/rabbitmq/notification-publisher.service';
 import { RedisService } from 'src/app/services/redis/redis.service';
 import { DevicesRepository } from 'src/models/repositories/devices.repository';
 import { LoginHistoriesRepository } from 'src/models/repositories/login_histories.repository';
@@ -28,6 +29,7 @@ export class AuthService {
         private readonly usersRepo: UsersRepository,
 
         // SERVICES
+        private readonly notificationPublisherService: NotificationPublisherService,
         private readonly redisService: RedisService,
 
         // HELPER
@@ -65,8 +67,12 @@ export class AuthService {
 
         await this.redisService.saveOtp("register", data.mobile_number, hashedOtp);
 
-        // TODO: Invoke Notification Service to deliver OTP via SMS
         console.log(`[DEBUG - REGISTRATION OTP for ${data.mobile_number}]: ${otp}`);
+        await this.notificationPublisherService.rmqPublishOtpRequest(
+            data.mobile_number,
+            otp,
+            'register'
+        )
 
         return GrpcSuccessResponse(HttpStatus.OK, 'OTP sent successfully', hashedOtp);
     }
@@ -519,7 +525,7 @@ export class AuthService {
 
         const otpExists = await this.redisService.otpExists('forgot-password', mobile_number);
         if (otpExists) {
-            GrpcErrorResponse(
+            return GrpcErrorResponse(
                 HttpStatus.TOO_MANY_REQUESTS,
                 'OTP already sent, please wait before requesting another OTP'
             )
@@ -530,8 +536,12 @@ export class AuthService {
 
         await this.redisService.saveOtp('forgot-password', mobile_number, hashedOtp);
 
-        // TODO: Invoke Notification Service to deliver OTP via SMS
         console.log(`[DEBUG - FORGOT PASSWORD OTP for ${mobile_number}]: ${otp}`);
+        await this.notificationPublisherService.rmqPublishOtpRequest(
+            mobile_number,
+            otp,
+            'forgot-password'
+        )
 
         return GrpcSuccessResponse(
             HttpStatus.OK,
