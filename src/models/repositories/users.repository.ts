@@ -105,5 +105,19 @@ export class UsersRepository extends Repository<Users> {
             throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
         }
     }
+
+    async isAlreadyEmailExist(email: string) {
+        try {
+            const data = await this.find({
+                where: {
+                    email: email
+                }
+            });
+
+            return data.length > 0 ? true : false;
+        } catch (error: any) {
+            throw new NBException(error.stack, HttpStatus.BAD_REQUEST);
+        }
+    }
 }
 

@@ -128,6 +128,16 @@ export class AuthService {
             return GrpcErrorResponse(HttpStatus.BAD_REQUEST, 'Missing required profile fields');
         }
 
+        if (NB.isNoEmpty(data.email)) {
+            const isEmailExist = await this.usersRepo.isAlreadyEmailExist(data.email);
+            if (isEmailExist) {
+                return GrpcErrorResponse(
+                    HttpStatus.BAD_REQUEST,
+                    'Email already exist, Please use another email'
+                );
+            }
+        }
+
         const decodeToken: any = this.appHelper.verifyToken(data.registration_token);
         if (!NB.isNoEmpty(decodeToken) || !decodeToken.mobile_number) {
             return GrpcErrorResponse(
@@ -143,6 +153,7 @@ export class AuthService {
         const inserted = await this.usersRepo.createUser({
             first_name: data.first_name,
             last_name: data.last_name,
+            email: NB.isNoEmpty(data.email) ? data.email : null,
             mobile_number: verifiedMobileNumber,
             password: hashPassword,
             mobile_verified: 1,
